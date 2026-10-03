@@ -1,0 +1,37 @@
+{
+  "name": "@lab/rabbit-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node --enable-source-maps dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@prometheus-io/client": "0.16.1",
+    "amqplib": "0.10.5",
+    "fastify": "5.12.1",
+    "kafkajs": "2.2.4",
+    "mysql2": "3.14.5",
+    "pino": "9.14.0",
+    "ulid": "2.4.0",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/amqplib": "0.10.7",
+    "@types/node": "22.13.10",
+    "tsx": "4.19.3",
+    "typescript": "5.7.3",
+    "vitest": "3.2.7"
+  }
+}
