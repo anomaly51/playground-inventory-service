@@ -116,7 +116,13 @@ export class RabbitWorker {
 
   async start(): Promise<void> {
     void this.connectKafka();
-    await this.connectRabbit();
+    await this.connectRabbit().catch((error: unknown) => {
+      this.logger.warn(
+        { err: error, retryInMs: this.reconnectDelayMs },
+        "RabbitMQ unavailable at startup; reconnect scheduled",
+      );
+      this.scheduleReconnect();
+    });
   }
 
   private connectKafka(): Promise<void> {
@@ -163,20 +169,9 @@ export class RabbitWorker {
       clientProperties: { connection_name: "flashdrop-inventory-worker" },
       keepAlive: true,
       keepAliveDelay: 5_000,
+      timeout: 5_000,
     });
-    const channel = await connection.createConfirmChannel();
-    await this.assertTopology(channel);
-    await channel.prefetch(this.config.prefetch);
     this.rabbitConnection = connection;
-    this.channel = channel;
-    const consumer = await channel.consume(
-      RABBITMQ.queues.commands,
-      (message) => this.track(message),
-      { noAck: false, consumerTag: "flashdrop-inventory-worker" },
-    );
-    this.consumerTag = consumer.consumerTag;
-    this.rabbitReady = true;
-    this.reconnectDelayMs = 1_000;
     connection.on("error", (error) => {
       if (this.rabbitConnection === connection) this.rabbitReady = false;
       this.logger.error({ err: error }, "RabbitMQ connection error");
@@ -192,6 +187,29 @@ export class RabbitWorker {
         this.scheduleReconnect();
       }
     });
+    try {
+      const channel = await connection.createConfirmChannel();
+      await this.assertTopology(channel);
+      await channel.prefetch(this.config.prefetch);
+      this.channel = channel;
+      const consumer = await channel.consume(
+        RABBITMQ.queues.commands,
+        (message) => this.track(message),
+        { noAck: false, consumerTag: "flashdrop-inventory-worker" },
+      );
+      this.consumerTag = consumer.consumerTag;
+      this.rabbitReady = true;
+      this.reconnectDelayMs = 1_000;
+    } catch (error) {
+      if (this.rabbitConnection === connection) {
+        this.rabbitReady = false;
+        this.rabbitConnection = undefined;
+        this.channel = undefined;
+        this.consumerTag = undefined;
+      }
+      await connection.close().catch(() => undefined);
+      throw error;
+    }
     this.logger.info(
       { queue: RABBITMQ.queues.commands, prefetch: this.config.prefetch },
       "FlashDrop inventory worker consuming",
